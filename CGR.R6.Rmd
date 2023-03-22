@@ -1,0 +1,251 @@
+---
+title: "CGRverk6"
+author: "CGR"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(kableExtra)
+library(tidyverse)
+library(GGally)
+library(skimr)
+library(data.table)
+library(DataExplorer)
+library(car)
+```
+
+# Verkefni 6
+## Import Dataset
+
+#Veljið ykkur eina nýja flokkabreytu til að skoða til viðbótar við breyturnar tvær sem þið skoðuðuð í R verkefni 5.
+```{r}
+data0 <-
+  read.csv(
+    "Handahofskenndar_spurningar_um_lifid.csv",
+    header = T,
+    fill = T,
+    dec = ",",
+    sep = ";",
+    fileEncoding = 'UTF-8-BOM'
+  )
+data1 <- na.omit(data0)
+
+data_full <- data1 %>%
+  dplyr::select(
+    "Hvað.heldur.þú.að.500.gr.af.smjöri.kosti.í.Bónus.",
+    "Hvort.ertu.meira.fyrir.",
+    "Hvaða.stýrikerfi.er.á.símanum.þínum."
+  )
+
+data_c <-
+  data_full[data_full$Hvað.heldur.þú.að.500.gr.af.smjöri.kosti.í.Bónus. <= 800 &
+              data_full$Hvað.heldur.þú.að.500.gr.af.smjöri.kosti.í.Bónus. >= 140,]
+
+data_c %>%
+  plot_missing()
+
+ggplot(data_c, aes(x = Hvaða.stýrikerfi.er.á.símanum.þínum.)) +
+  geom_bar()
+
+
+```
+
+```{r}
+#merge cat&dogs with cats column
+data_f <- data_c %>%
+  mutate(type = factor(
+    case_when (
+      Hvort.ertu.meira.fyrir. == "Ketti" ~ "Cat &/ Dog",
+      Hvort.ertu.meira.fyrir. == "Hunda" ~ "Dog",
+      Hvort.ertu.meira.fyrir. == "Hunda,Ketti" ~ "Cat &/ Dog"
+    )
+  ))
+
+#levels
+data_f$dog_cat <- data_f$type
+levels(data_f$dog_cat)
+
+
+```
+
+```{r}
+#factor & levels new categorical variable
+data_g <- data_f %>%
+  mutate(ios_android = as.factor(Hvaða.stýrikerfi.er.á.símanum.þínum.))
+levels(data_g$ios_android)
+
+```
+
+```{r}
+#make a dataframe
+verk6 <-
+  data.frame(
+    num = data_g$Hvað.heldur.þú.að.500.gr.af.smjöri.kosti.í.Bónus.,
+    dog_cat = data_g$dog_cat,
+    ios_android = data_g$ios_android
+  )
+```
+
+# Skoðið myndrænt sambandið milli gömlu flokkabreytunnar og nýju flokkabreytunnar (t.d. með stöplariti)
+
+```{r}
+verk6 %>%
+  count(dog_cat, ios_android) %>%
+  ggplot() +
+  aes(x = dog_cat,
+      y = n,
+      fill = factor(ios_android)) +
+  geom_col(position = "fill") +
+  scale_fill_brewer(palette = "Dark2", direction = 1) +
+  labs(x  = "Cat vs. Dog", y = "Proportion", fill = "Operating System") +
+  theme_test()
+```
+
+# Smíðið tilgátu sem kannar hvort það séu tengls milli flokkabreytanna tveggja.
+
+Categorical Variable 1: The amount of people who prefer dogs vs. cats(&people who are indifferent)
+
+Categorical Variable 2: The amount of people who use iOS and those who use Android
+
+Chi-squared:
+The null hypothesis for the chi-squared test of independence is that there is no relationship between the two categorical variables. In other words, the two variables are independent of each other. 
+
+The alternative hypothesis is that there is a relationship between the two variables.
+
+*When we say that there is a relationship between two categorical variables, we mean that the values of one variable are somehow related to or associated with the values of the other variable. In other words, knowing the category of one variable gives us some information about the likely category of the other variable.*
+
+Prop test:
+The null hypothesis would be that the proportion of university students who prefer dogs over cats is equal to the proportion of university students who prefer iOS over Android. 
+
+The alternative hypothesis would be that the proportions are not equal.
+
+# Notið tilgátupróf fyrir flokkabreytur til að kanna tilgátuna.
+
+
+```{r}
+chisq.test(verk6$dog_cat, verk6$ios_android)
+```
+
+We want to know if the preference for dogs vs. cats is the same as the preference for iOS vs. Android, or if there is a significant difference between the two.
+
+```{r}
+prop.test(table(verk6$dog_cat, verk6$ios_android))
+```
+
+# Túlkið niðurstöðu prófsins.
+According to the Pearson´s chi-squared test, there is a statistically significant association between the two categorical variables since the p-value was very low 0.0002169. 
+
+The two sample test for equality of proportions is used to test the null hypothesis that the proportion of both categorical variables are equal. The p-value is the same as the chi-squared test. The 95% confidence interval for the difference in proportions between dog_cat and ios_android is between 0.1072863 and 0.3943010. The sample estimates show that the proportion of dog_cat is 0.4285714, and the proportion of ios_android is 0.1777778. The proportion of the categorical variable dog_cat is significantly higher than the proportion of categorical variable ios_android.
+
+
+# Notið tilgátupróf fyrir talnabreytur til að kanna hvort það sé munur á meðaltölum gömlu talnabreytunnar á milli hópanna tveggja í gömlu flokkabreytunni. Þ.e.a.s. nákvæmlega sömu tvær breytur og þið gerðuð umraðanaprófið í kafla 5 fyrir nema nú er lýsistærðin meðaltal hjá ykkur öllum.
+
+There are several assumptions that should be checked before performing a t test:
+1. Normality
+2. Homogeneity of variance
+3. Independence
+
+### Normality
+```{r}
+par(mfrow = c(1, 2))
+qqplot(x = verk6$dog_cat, y = verk6$num)
+qqplot(verk6$ios_android, y = verk6$num)
+```
+As can be seen in these boxplots, the median line is never centered on the box indicating skewed data. Also, the whiskers extend far beyond the box for the factor `dog` and `iOS`, which indicates that the data has a large variance and is not normally distributed. 
+
+Normality tests are not appropriate for a categorical variable, because normality is a concept that applies only to continuous data. 
+```{r}
+shapiro.test(verk6$num)
+ks.test(verk6$num,
+        "pnorm",
+        mean = mean(verk6$num),
+        sd = sd(verk6$num))
+```
+Shapiro-Wilk: 
+Ho: the numerical variable is normally distributed. 
+
+In this case, the p-value is 0.003525 which is less than 0.05, so we can reject the null hypothesis and conclude that the data is not normally distributed.
+
+Kolmogorov-Smirnov: 
+Ho: numerical data is from a normal distribution 
+
+The p-value is 0.08383 which is greater than 0.05, so we fail to reject the null hypothesis and conclude that the data is likely to be from a normal distribution. However, there is a warning that ties should not be present, so it's possible that the test may not be completely accurate in this case.
+
+My conclusion from the boxplots and the two tests is that the numerical variable is not normally distributed so a t.test is not a good hypothesis test to use. 
+
+### Homogeneity of variance
+
+Null hypothesis of the levene's test: the variance of the numerical variable is equal between the two groups (dog vs. cat) of the categorical variable dog_cat.
+```{r}
+leveneTest(num ~ dog_cat, data = verk6)
+```
+Since the p-value is greater than the significance level of 0.05, we fail to reject the null hypothesis. Therefore, we can conclude that there is not enough evidence to suggest that the variance of the num variable is different between the two groups defined by dog_cat.
+
+Null hypothesis of the levene's test: the variance of the numerical variable is equal between the two groups (ios vs. android) of the categorical variable ios_android.
+```{r}
+leveneTest(num ~ ios_android, data = verk6)
+```
+In both cases, the p-value is greater than 0.05, which suggests that there is no significant evidence to reject the null hypothesis of equal variances between the two groups. Therefore, we can assume that the variances are equal and it is appropriate to perform a two-sample t-test to compare the means of the two groups.
+
+### Independence
+```{r}
+chisq.test(table(verk6$dog_cat, verk6$ios_android))
+```
+The p-value is less than the significance level, then we can reject the null hypothesis of independence and conclude that there is a significant association between the two variables. The t test assumption of independence is met. 
+
+
+
+### T-test 
+Regardless of the assumptions tests above, a t-test is required for this assignment. 
+In the t-test, we are testing whether there is a significant difference in the mean price of 500g of butter in Iceland between those who prefer dogs versus those who prefer cats.
+
+The null hypothesis is that there is no difference between the two means, and the alternative hypothesis is that there is a difference between the two means.
+
+The "two.sided" alternative indicates that we are testing for any difference in the means, regardless of the direction (i.e., whether dog lovers estimate the price higher or lower than cat lovers).
+```{r}
+t.test(num ~ dog_cat, data = verk6, alternative = 'two.sided')
+```
+### Permutation Test
+```{r}
+#create a vector of mean values where each value corresponds to one of the unique values in the verk5$cat column (either Dog or Cat&/Dog)
+tapply(verk6$num, verk6$dog_cat, mean)
+
+#create a vector of differences by calculating the diff between the means of both groups
+diff(tapply(verk6$num, verk6$dog_cat, mean))
+
+#generate 100000 random permutations of the categorical variable verk5$cat
+tmp <-
+  replicate(100000, diff(tapply(verk6$num, sample(verk6$dog_cat), mean)))
+
+#histogram that shows the distribution of differences between mean values under random permutations of the categorical variable
+hist(tmp)
+
+#critical values at a 0.05 significance level
+quantile(tmp, c(0.025, 0.975))
+
+#If the observed difference between mean values is outside this range, we can reject the null hypothesis that there is no difference between groups.
+```
+
+
+# Túlkið niðurstöður prófsins.
+
+The t-test and permutation test are both used to compare the means of two groups, dog vs. cat(+indifferent people), but they have different underlying assumptions and hypotheses.
+
+The t-test assumes that the data is normally distributed and that the variances of the two groups are equal, which we know is not 100% true based on the boxplots and normality test performed above. The null hypothesis is that the means of the two groups are equal, and the alternative hypothesis is that they are not equal. The p-value of the t-test was 0.7051, which suggests that there is not enough evidence to reject the null hypothesis.
+
+The permutation test, on the other hand, does not make any assumptions about the distribution of the data or the variances of the groups. It randomly permutes the two groups and calculates the difference in means between the permuted groups. This process is repeated many times to generate a null distribution of mean differences. The null hypothesis is that the group labels (ie. dog vs. cat(+indifferent people)) have no effect on the mean, and the alternative hypothesis is that they do have an effect.
+
+The histogram of differences between means under random permutations of the categorical variable shows a distribution that is centered around zero, which is consistent with the null hypothesis. The critical values at a 0.05 significance level are -42.21270 and 41.97831, which suggests that the observed difference in means is not statistically significant.
+
+
+# Bonus: Hugleiðið muninn á niðurstöðunni sem þið fenguð með umraðanaprófi og niðurstöðunni sem þið fáið þegar þið notið hefðbundin tilgátupróf til að draga ályktanir um talnabreytur. Var mikill munur? Hver haldið þið að ástæðan sé? Var sama lýsistærð? Eru allar forsendur tilgátuprófsins uppfylltar?
+
+Overall, the t-test and permutation test give slightly different results because they have different assumptions and hypotheses. The permutation test is more robust and does not make any distributional assumptions. 
